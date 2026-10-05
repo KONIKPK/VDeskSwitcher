@@ -13,6 +13,7 @@ internal static class NativeMethods
     [DllImport("user32.dll")] private static extern bool IsIconic(nint hwnd);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(nint hwnd, out Rect rect);
     [DllImport("user32.dll")] private static extern nint MonitorFromWindow(nint hwnd, uint flags);
+    [DllImport("user32.dll")] private static extern nint MonitorFromPoint(Point point, uint flags);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
     [DllImport("user32.dll")] private static extern nint GetShellWindow();
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(nint hwnd, StringBuilder text, int count);
@@ -50,6 +51,16 @@ internal static class NativeMethods
     // Native equivalents of VirtualScreenLeft/Width, in GetCursorPos physical pixels.
     internal static (int Left, int Width) VirtualScreen() => (GetSystemMetrics(76), GetSystemMetrics(78));
 
+    internal static (int Left, int Top, int Width, int Height) PrimaryScreen()
+    {
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        var outside = new Point { X = int.MinValue, Y = int.MinValue };
+        if (!GetMonitorInfo(MonitorFromPoint(outside, 1), ref info))
+            throw new InvalidOperationException("Cannot read primary monitor bounds.");
+        return (info.Monitor.Left, info.Monitor.Top,
+            info.Monitor.Right - info.Monitor.Left, info.Monitor.Bottom - info.Monitor.Top);
+    }
+
     private static bool KeyDown(int key) => (GetAsyncKeyState(key) & 0x8000) != 0;
 
     internal static bool MouseButtonDown() => KeyDown(1) || KeyDown(2) || KeyDown(4) || KeyDown(5) || KeyDown(6);
@@ -72,15 +83,21 @@ internal static class NativeMethods
     internal static void SendDesktopShortcut(EdgeDirection direction)
     {
         if (direction == EdgeDirection.None) return;
-        ushort arrow = direction == EdgeDirection.Next ? (ushort)0x27 : (ushort)0x25;
+        SendShortcut(direction == EdgeDirection.Next ? (ushort)0x27 : (ushort)0x25, control: true);
+    }
+
+    internal static void SendTaskViewShortcut() => SendShortcut(0x09, control: false);
+
+    private static void SendShortcut(ushort shortcutKey, bool control)
+    {
         bool addWin = !KeyDown(0x5B) && !KeyDown(0x5C);
-        bool addControl = !KeyDown(0x11);
-        bool releaseArrow = !KeyDown(arrow);
+        bool addControl = control && !KeyDown(0x11);
+        bool releaseKey = !KeyDown(shortcutKey);
         List<Input> inputs = [];
         if (addWin) inputs.Add(Keyboard(0x5B, false));
         if (addControl) inputs.Add(Keyboard(0x11, false));
-        inputs.Add(Keyboard(arrow, false));
-        if (releaseArrow) inputs.Add(Keyboard(arrow, true));
+        inputs.Add(Keyboard(shortcutKey, false));
+        if (releaseKey) inputs.Add(Keyboard(shortcutKey, true));
         if (addControl) inputs.Add(Keyboard(0x11, true));
         if (addWin) inputs.Add(Keyboard(0x5B, true));
         uint sent = SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf<Input>());
@@ -91,7 +108,7 @@ internal static class NativeMethods
         {
             var key = input.Data.Keyboard;
             if ((key.Flags & 2) != 0) held.Remove(key.Key);
-            else if (key.Key != arrow || releaseArrow) held.Add(key.Key);
+            else if (key.Key != shortcutKey || releaseKey) held.Add(key.Key);
         }
         var releases = held.AsEnumerable().Reverse().Select(key => Keyboard(key, true)).ToArray();
         uint released = releases.Length == 0 ? 0 : SendInput((uint)releases.Length, releases, Marshal.SizeOf<Input>());

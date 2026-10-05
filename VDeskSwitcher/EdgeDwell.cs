@@ -40,6 +40,15 @@ internal sealed class EdgeDwell
         return edge;
     }
 
+    internal bool UpdateTop(long milliseconds, int cursorX, int cursorY,
+        int left, int top, int width, int height, bool suppressed)
+    {
+        bool atTop = cursorX >= left && cursorX < (long)left + width &&
+            cursorY >= top && cursorY < (long)top + EdgeSettings.EdgeZonePx;
+        // Use Y as the dwell axis; the bottom edge is never enabled.
+        return Update(milliseconds, cursorY, top, height, suppressed || !atTop) == EdgeDirection.Previous;
+    }
+
     internal void CancelPending()
     {
         enteredAt = null;

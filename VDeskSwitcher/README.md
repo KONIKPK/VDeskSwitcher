@@ -5,8 +5,10 @@ A tray edge switcher with one settings window. The solution/project and executab
 ## Behavior
 
 - Hold the cursor at the outer right/left edge of the entire virtual screen to switch next/previous desktop. Default dwell: 500 ms.
+- Hold at the primary monitor's top edge for the same dwell to open Windows Task View (Win+Tab). Other monitors' top edges do not trigger it; side switching takes priority at shared corners.
 - Move at least 20 physical pixels inward before returning to trigger again.
-- No switching while any mouse button is held or a fullscreen foreground window covers its monitor.
+- Move at least 20 px down from the primary top edge before triggering Task View again. Remaining at the edge does not repeatedly send Win+Tab.
+- No edge actions while any mouse button is held or a fullscreen foreground window covers its monitor.
 - No wrapping by default. Settings and short comments are in `EdgeSettings.cs`.
 - Manual/F5 startup opens settings; `VDeskSwitcher.exe --tray` starts hidden. Settings never appear on the taskbar.
 - Closing or minimizing settings hides the window; double-click the icon or choose `Nastavenia` to reopen it.
@@ -36,4 +38,4 @@ Logs: `%LOCALAPPDATA%\VDeskSwitcher\app.log`.
 
 `dotnet run --project artifacts/edge-validation/EdgeValidation.csproj`
 
-The validation harness exercises timing, edge coordinates, hysteresis, target selection, mocked COM/fallback failures and native INPUT layout without real desktop switching or keyboard injection.
+The validation harness exercises side/top timing, primary-monitor bounds, hysteresis, settings, target selection, mocked COM/fallback failures and native INPUT layout without real desktop switching or keyboard injection.

@@ -21,6 +21,7 @@ internal sealed class TrayController : IDisposable
     private readonly DispatcherTimer cursorTimer;
     private readonly DesktopSwitcher switcher;
     private readonly EdgeDwell dwell = new();
+    private readonly EdgeDwell topDwell = new();
     private readonly Action<string> log;
     private SettingsWindow? settings;
     private bool enabled = true;
@@ -61,7 +62,7 @@ internal sealed class TrayController : IDisposable
         };
         cursorTimer.Tick += CursorTick;
         cursorTimer.Start();
-        log($"TRAY READY: poll={EdgeSettings.PollMilliseconds} ms, dwell={EdgeSettings.DwellMilliseconds} ms, edge={EdgeSettings.EdgeZonePx} px, rearm={EdgeSettings.RearmDistancePx} px, wrap={EdgeSettings.WrapAround}.");
+        log($"TRAY READY: poll={EdgeSettings.PollMilliseconds} ms, dwell={EdgeSettings.DwellMilliseconds} ms, edge={EdgeSettings.EdgeZonePx} px, rearm={EdgeSettings.RearmDistancePx} px, wrap={EdgeSettings.WrapAround}, primary top=Win+Tab.");
     }
 
     internal void ShowSettings()
@@ -98,6 +99,7 @@ internal sealed class TrayController : IDisposable
     {
         enabled = !enabled;
         dwell.CancelPending();
+        topDwell.CancelPending();
         cursorTimer.IsEnabled = enabled;
         toggle.Text = enabled ? "Vypnúť" : "Zapnúť";
         tray.Text = enabled ? "DeskOverview" : "DeskOverview — vypnuté";
@@ -109,18 +111,35 @@ internal sealed class TrayController : IDisposable
         if (!enabled || disposed) return;
         try
         {
-            if (!NativeMethods.GetCursorPos(out var cursor)) { dwell.CancelPending(); return; }
+            if (!NativeMethods.GetCursorPos(out var cursor))
+            {
+                dwell.CancelPending();
+                topDwell.CancelPending();
+                return;
+            }
             var (left, width) = NativeMethods.VirtualScreen();
+            var primary = NativeMethods.PrimaryScreen();
             long right = (long)left + width - 1;
-            bool atEdge = (cursor.X >= left && cursor.X < (long)left + EdgeSettings.EdgeZonePx) ||
+            bool atSide = (cursor.X >= left && cursor.X < (long)left + EdgeSettings.EdgeZonePx) ||
                 (cursor.X <= right && cursor.X > right - EdgeSettings.EdgeZonePx);
-            bool suppressed = NativeMethods.MouseButtonDown() || (atEdge && NativeMethods.IsFullscreenForeground());
-            var direction = dwell.Update(Environment.TickCount64, cursor.X, left, width, suppressed);
+            bool atTop = cursor.X >= primary.Left && cursor.X < (long)primary.Left + primary.Width &&
+                cursor.Y >= primary.Top && cursor.Y < (long)primary.Top + EdgeSettings.EdgeZonePx;
+            bool suppressed = NativeMethods.MouseButtonDown() || ((atSide || atTop) && NativeMethods.IsFullscreenForeground());
+            long now = Environment.TickCount64;
+            var direction = dwell.Update(now, cursor.X, left, width, suppressed);
+            bool taskView = topDwell.UpdateTop(now, cursor.X, cursor.Y,
+                primary.Left, primary.Top, primary.Width, primary.Height, suppressed || atSide);
             if (direction != EdgeDirection.None) switcher.Switch(direction);
+            else if (taskView)
+            {
+                NativeMethods.SendTaskViewShortcut();
+                log("TASK VIEW: sent Win+Tab.");
+            }
         }
         catch (Exception ex)
         {
             dwell.CancelPending();
+            topDwell.CancelPending();
             log($"CURSOR CHECK ERROR: {AppLog.Describe(ex)}");
         }
     }
