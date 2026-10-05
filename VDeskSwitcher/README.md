@@ -1,41 +1,55 @@
-# DeskOverview edge switcher
+# VDeskSwitcher
 
-A tray edge switcher with one settings window. The solution/project and executable remain named `VDeskSwitcher`.
+Tiny Windows tray app that lets you control virtual desktops with the mouse cursor at the screen edges, similar to screen edges in KDE Plasma:
 
-## Behavior
+- rest the cursor on the **left or right edge** to switch to the previous / next virtual desktop,
+- rest it on the **top edge** to open Task View (same as pressing **Win + Tab**).
 
-- Hold the cursor at the outer right/left edge of the entire virtual screen to switch next/previous desktop. Default dwell: 500 ms.
-- Hold at the primary monitor's top edge for the same dwell to open Windows Task View (Win+Tab). Other monitors' top edges do not trigger it; side switching takes priority at shared corners.
-- Move at least 20 physical pixels inward before returning to trigger again.
-- Move at least 20 px down from the primary top edge before triggering Task View again. Remaining at the edge does not repeatedly send Win+Tab.
-- No edge actions while any mouse button is held or a fullscreen foreground window covers its monitor.
-- No wrapping by default. Settings and short comments are in `EdgeSettings.cs`.
-- Manual/F5 startup opens settings; `VDeskSwitcher.exe --tray` starts hidden. Settings never appear on the taskbar.
-- Closing or minimizing settings hides the window; double-click the icon or choose `Nastavenia` to reopen it.
-- The integer slider accepts 100–5000 ms and applies/saves immediately to `%AppData%\DeskOverview\settings.json`. Missing/damaged files use defaults; out-of-range values are clamped.
-- Tray menu: `Nastavenia`, `Zapnúť/Vypnúť`, `Spustiť pri štarte Windows` (checked when enabled), `Ukončiť`.
-- Autostart uses `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\VDeskSwitcher` with `"<path>\VDeskSwitcher.exe" --tray`. Matching legacy entries are updated automatically.
-- A named mutex prevents another instance in the same Windows session.
+## How it works
 
-Slions.VirtualDesktop 6.9.2 is retained from the verified spike. All calls are caught and logged. A library failure uses Win+Ctrl+Left/Right through SendInput; Windows may block injection into higher-integrity applications. The native shortcut does not support optional wrapping when COM is unavailable.
+- Move the cursor to the **right edge** of the screen and hold it there -> switches to the **next** virtual desktop.
+- Move the cursor to the **left edge** and hold it there -> switches to the **previous** virtual desktop.
+- Move the cursor to the **top edge** and hold it there -> opens **Task View** (Win + Tab) with all your virtual desktops and windows.
+- The delay before an action triggers is configurable (default 500 ms).
+- After an action, the trigger re-arms only once the cursor leaves the edge, so desktops don't cycle endlessly and Task View doesn't reopen repeatedly.
+- No action while a mouse button is held (dragging windows, selecting text) or while a fullscreen app/game is in the foreground.
+- Edges are the outer edges of the whole virtual screen, so multi-monitor setups don't trigger on the border between two monitors.
 
-Logs: `%LOCALAPPDATA%\VDeskSwitcher\app.log`.
+## Features
 
-## Manual test
+- Left / right edge: switch to the previous / next virtual desktop
+- Top edge: open Task View (Win + Tab)
+- Runs quietly in the system tray, no taskbar window
+- Settings window: wait time before triggering (100-5000 ms), applied instantly
+- Optional start with Windows (starts hidden in the tray)
+- Single instance only
+- Per-monitor DPI aware
+- Settings stored in `%AppData%\DeskOverview\settings.json`
 
-1. Run/F5 without arguments: settings and the tray icon appear, but no taskbar button. Close with X: the process/icon stay alive. Reopen by tray double-click and `Nastavenia`; minimize also hides it.
-2. Exit through `Ukončiť`, then run with `--tray`: no settings window should appear. A second launch still exits due to the mutex.
-3. Move the slider to 100, 1500 and 5000 ms. The numeric readout/JSON should update immediately, and the next edge dwell uses that value. Restart and confirm it is restored. Test damaged JSON and values below 100/above 5000 while the app is stopped.
-4. Create two or three desktops. Hold at the right edge for the chosen dwell. Confirm exactly one next-desktop switch, even if the cursor stays there.
-5. Move only 19 px inward and return: no new trigger. Move 20 px inward, return and dwell: one new switch. Confirm first/last desktops do not wrap.
-6. Check internal monitor boundaries, mixed display scales, held mouse buttons/dragging and fullscreen applications: existing suppression behavior must be unchanged.
-7. Toggle enable/disable. Enable autostart, inspect the Run value for `--tray`, then sign in again: settings remain hidden. Disable autostart and verify the value is removed.
-8. Exit through the tray; the process/icon/settings window should disappear. Review the log for COM, SendInput, settings or registry errors.
+## Requirements
 
-## Automated validation
+- Windows 10 / 11 with virtual desktops
+- .NET 10 Desktop Runtime (not needed for the self-contained build)
 
-`dotnet build VDeskSwitcher.slnx`
+## Usage
 
-`dotnet run --project artifacts/edge-validation/EdgeValidation.csproj`
+1. Run the exe. An icon appears in the system tray.
+2. Double-click the icon (or use **Settings** in its menu) to change the delay.
+3. Tray menu: **Settings**, **Enable/Disable**, **Start with Windows**, **Exit**.
+4. Closing the settings window only hides it. Use **Exit** in the tray menu to quit.
 
-The validation harness exercises side/top timing, primary-monitor bounds, hysteresis, settings, target selection, mocked COM/fallback failures and native INPUT layout without real desktop switching or keyboard injection.
+## Build
+
+```
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
+```
+
+## Notes
+
+Windows has no official API for virtual desktops, so the app relies on a third-party wrapper over undocumented interfaces. If a major Windows update breaks it, the app falls back to simulating `Win + Ctrl + Left/Right`.
+
+The exe is not code-signed, so Windows SmartScreen may show a warning on first run (More info -> Run anyway).
+
+## License
+
+Add a license of your choice (e.g. MIT).
